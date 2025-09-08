@@ -8,6 +8,9 @@ import nodemailer from "nodemailer";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 const port = process.env.PORT || 5000;
 import fs from "fs";
+
+import twilio from "twilio";
+import sgMail from "@sendgrid/mail";
 const app = express();
 // Middleware
 app.use(
@@ -46,11 +49,12 @@ async function run() {
 
     const db = client.db("student_life_toolkit");
     const usersCollection = db.collection("users");
-    const dashboardCollection = db.collection("dashboard");
+
     const classesCollection = db.collection("classes");
     const budgetCollection = db.collection("budget");
     const questionsCollection = db.collection("questions");
     const plannerCollection = db.collection("monthlyPlannerTasks");
+    const attemptsCollection = db.collection("attempts");
 
     app.post("/api/generate-questions", async (req, res) => {
       try {
@@ -131,36 +135,56 @@ async function run() {
       res.json(users);
     });
 
-    // Dashboard endpoints
-
-    app.post("/dashboard", async (req, res) => {
+    app.get("/api/attempts", async (req, res) => {
       try {
-        const item = req.body;
-        const result = await dashboardCollection.insertOne(item);
-        res.status(200).json({
-          success: true,
-          message: "Dashboard item added",
-          data: result,
+        const attempts = await attemptsCollection.find().toArray();
+        res.json({ success: true, data: attempts });
+      } catch (err) {
+        console.error("Failed to fetch attempts:", err);
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch attempts",
+          error: err.message,
         });
-      } catch (error) {
-        res
-          .status(500)
-          .json({ message: "Failed to add dashboard item", error });
       }
     });
 
-    app.get("/dashboard", async (req, res) => {
+    // POST /api/attempts - Save user attempt
+    app.post("/api/attempts", async (req, res) => {
       try {
-        const items = await dashboardCollection.find().toArray();
-        res.status(200).json(items);
-      } catch (error) {
-        res
-          .status(500)
-          .json({ message: "Failed to fetch dashboard items", error });
+        const { questionId, userAnswer, isCorrect } = req.body;
+
+        if (
+          !questionId ||
+          userAnswer === undefined ||
+          isCorrect === undefined
+        ) {
+          return res.status(400).json({ message: "Missing required fields" });
+        }
+
+        const result = await attemptsCollection.insertOne({
+          questionId: new ObjectId(questionId),
+          userAnswer,
+          isCorrect,
+          createdAt: new Date(),
+        });
+
+        res.status(201).json({
+          success: true,
+          message: "Attempt saved successfully",
+          data: { _id: result.insertedId, questionId, userAnswer, isCorrect },
+        });
+      } catch (err) {
+        console.error("Failed to save attempt:", err);
+        res.status(500).json({
+          success: false,
+          message: "Failed to save attempt",
+          error: err.message,
+        });
       }
     });
 
-    // Classes endpoints
+    // GET all classes
     app.get("/api/classes", async (req, res) => {
       try {
         const classes = await classesCollection.find().toArray();
@@ -171,6 +195,7 @@ async function run() {
       }
     });
 
+    // POST new class
     app.post("/api/classes", async (req, res) => {
       try {
         const newClass = req.body;
@@ -182,20 +207,29 @@ async function run() {
       }
     });
 
+    // PUT update class
     app.put("/api/classes/:id", async (req, res) => {
       try {
         const { id } = req.params;
         if (!ObjectId.isValid(id))
           return res.status(400).json({ message: "Invalid class ID" });
 
-        const { name, instructor, day, startTime, endTime, color } = req.body;
-        if (!name || !instructor || !day || !startTime || !endTime || !color) {
+        const { name, instructor, day, startTime, endTime, type, color } =
+          req.body;
+        if (
+          !name ||
+          !instructor ||
+          !day ||
+          !startTime ||
+          !endTime ||
+          !type ||
+          !color
+        )
           return res.status(400).json({ message: "All fields are required" });
-        }
 
         const result = await classesCollection.findOneAndUpdate(
           { _id: new ObjectId(id) },
-          { $set: { name, instructor, day, startTime, endTime, color } },
+          { $set: { name, instructor, day, startTime, endTime, type, color } },
           { returnDocument: "after" }
         );
 
@@ -204,11 +238,12 @@ async function run() {
 
         res.json(result.value);
       } catch (error) {
-        console.error("Update Class Error:", error);
+        console.error(error);
         res.status(500).json({ message: "Failed to update class", error });
       }
     });
 
+    // DELETE single class
     app.delete("/api/classes/:id", async (req, res) => {
       try {
         const { id } = req.params;
@@ -223,49 +258,16 @@ async function run() {
       }
     });
 
-    // AI Suggestions endpoint
-    app.post("/ai/suggest", async (req, res) => {
-      const { totalClasses, upcomingExams, weeklyPerformance, weakTopics } =
-        req.body;
-
+    // BULK DELETE
+    app.post("/api/classes/bulk-delete", async (req, res) => {
       try {
-        const prompt = `
-You are an academic assistant.
-Total classes: ${totalClasses}
-Upcoming exams: ${upcomingExams}
-Weekly performance: ${weeklyPerformance?.join(", ") || "None"}
-Weak topics: ${weakTopics?.join(", ") || "None"}
-
-Suggest 5 concise, actionable study tips for the student.
-`;
-
-        const response = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.7,
-        });
-
-        const tipsText = response.choices[0].message.content;
-        const tips = tipsText
-          .split("\n")
-          .map((t) => t.replace(/^\d+\.?\s*/, "").trim())
-          .filter((t) => t);
-
-        res.json({ tips });
-      } catch (err) {
-        console.error("OpenAI Error:", err);
-
-        if (err.code === "insufficient_quota" || err.status === 429) {
-          return res.status(429).json({
-            message:
-              "OpenAI quota exceeded or rate limit hit. Please try again later.",
-          });
-        }
-
-        res.status(500).json({
-          message: "Failed to generate AI suggestions",
-          error: err.message || err,
-        });
+        const { ids } = req.body;
+        const objectIds = ids.map((id) => new ObjectId(id));
+        await classesCollection.deleteMany({ _id: { $in: objectIds } });
+        res.json({ message: "Selected classes deleted" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Bulk delete failed", error });
       }
     });
 

@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@google/generative-ai": "^0.8.0",
+    "@sendgrid/mail": "^8.1.5",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -19,6 +20,7 @@
     "mongodb": "^6.19.0",
     "nodemailer": "^7.0.6",
     "openai": "^5.16.0",
+    "twilio": "^5.9.0",
     "uuid": "^11.1.0"
   }
 }
