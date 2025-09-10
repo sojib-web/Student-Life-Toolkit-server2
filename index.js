@@ -15,13 +15,14 @@ const app = express();
 // Middleware
 
 const allowedOrigins = [
-  "http://localhost:5173",
-  "https://student-life-tool-kit.netlify.app", // ✅ এখানে slash থাকবে না
+  "http://localhost:5173", // Development
+  "https://student-life-tool-kit.netlify.app", // Production
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -31,20 +32,6 @@ app.use(
     credentials: true,
   })
 );
-
-// ✅ Preflight রিকোয়েস্ট হ্যান্ডলিং
-app.options("*", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.sendStatus(200);
-});
 
 app.use(express.json());
 
