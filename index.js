@@ -13,9 +13,22 @@ import twilio from "twilio";
 import sgMail from "@sendgrid/mail";
 const app = express();
 // Middleware
+
+const allowedOrigins = [
+  "http://localhost:5173", // Development
+  "https://statuesque-cobbler-fe5a03.netlify.app", // Production
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5173", // React frontend URL
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS policy: This origin is not allowed"));
+      }
+    },
     credentials: true,
   })
 );
