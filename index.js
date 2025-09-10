@@ -16,7 +16,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:5173", // Development
-  "https://statuesque-cobbler-fe5a03.netlify.app", // Production
+  "https://student-life-tool-kit.netlify.app/", // Production
 ];
 
 app.use(
