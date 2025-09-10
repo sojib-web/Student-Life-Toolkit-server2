@@ -16,7 +16,7 @@ const app = express();
 
 const allowedOrigins = [
   "http://localhost:5173", // Development
-  "https://student-life-tool-kit.netlify.app", // Production
+  // "https://student-life-tool-kit.netlify.app", // Production
 ];
 
 app.use(
@@ -220,15 +220,20 @@ async function run() {
       }
     });
 
-    // PUT update class
     app.put("/api/classes/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        if (!ObjectId.isValid(id))
+        console.log("🔹 Received PUT request for id:", id);
+        console.log("🔹 Request body:", req.body);
+
+        if (!ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid class ID" });
+        }
 
         const { name, instructor, day, startTime, endTime, type, color } =
           req.body;
+
+        // ✅ Ensure all fields exist
         if (
           !name ||
           !instructor ||
@@ -237,22 +242,27 @@ async function run() {
           !endTime ||
           !type ||
           !color
-        )
+        ) {
           return res.status(400).json({ message: "All fields are required" });
+        }
 
+        // ✅ Use findOneAndUpdate properly
         const result = await classesCollection.findOneAndUpdate(
           { _id: new ObjectId(id) },
           { $set: { name, instructor, day, startTime, endTime, type, color } },
           { returnDocument: "after" }
         );
 
-        if (!result.value)
-          return res.status(404).json({ message: "Class not found" });
+        console.log("🔹 Update result:", result);
 
-        res.json(result.value);
+        if (!result.value) {
+          return res.status(404).json({ message: "Class not found" });
+        }
+
+        res.status(200).json(result.value);
       } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Failed to update class", error });
+        console.error("❌ Error updating class:", error);
+        res.status(500).json({ message: "Failed to update class" });
       }
     });
 
